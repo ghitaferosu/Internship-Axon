@@ -1,0 +1,61 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: event-service
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:event_db}
+    username: ${DB_USER:user}
+    password: ${DB_PASSWORD:secret}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    show-sql: true
+    hibernate:
+      format_sql: true
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50
+          batch_versioned_data: true
+        order_inserts: true
+        order_updates: true
+        generate_statistics: true
+
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: event-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+    org.hibernate.stat: DEBUG
+
+internal:
+  shared-secret: ${INTERNAL_SHARED_SECRET:dev-only-secret}
+

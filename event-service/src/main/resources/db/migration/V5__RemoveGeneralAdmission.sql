@@ -1,0 +1,9 @@
+ALTER TABLE sections DROP CONSTRAINT chk_sections_shape;
+ALTER TABLE sections DROP COLUMN shape;
+ALTER TABLE sections DROP COLUMN capacity;
+
+ALTER TABLE sections ALTER COLUMN direction SET NOT NULL;
+ALTER TABLE sections ALTER COLUMN row_start SET NOT NULL;
+ALTER TABLE sections ALTER COLUMN row_end SET NOT NULL;
+ALTER TABLE sections ALTER COLUMN seat_start SET NOT NULL;
+ALTER TABLE sections ALTER COLUMN seat_end SET NOT NULL;

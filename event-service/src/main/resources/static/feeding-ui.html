@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>event-service — feeding job UI</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; line-height: 1.4; }
+  h1 { font-size: 1.3rem; }
+  h1 code { font-size: 1rem; }
+  .tabs { display: flex; gap: 0.5rem; border-bottom: 2px solid #8883; margin-bottom: 1rem; }
+  .tabs button { background: none; border: none; padding: 0.6rem 1rem; cursor: pointer; font-size: 1rem; border-bottom: 2px solid transparent; margin-bottom: -2px; opacity: 0.6; }
+  .tabs button.active { opacity: 1; border-bottom-color: #4a90d9; font-weight: 600; }
+  section.panel { display: none; }
+  section.panel.active { display: block; }
+  label { display: block; font-weight: 600; margin: 0.8rem 0 0.2rem; font-size: 0.9rem; }
+  input[type=text], input[type=number], input[type=datetime-local], textarea {
+    width: 100%; box-sizing: border-box; padding: 0.4rem; font-family: inherit; font-size: 0.95rem;
+    border: 1px solid #8886; border-radius: 4px; background: transparent; color: inherit;
+  }
+  textarea { font-family: ui-monospace, monospace; min-height: 140px; resize: vertical; }
+  .row { display: flex; gap: 0.5rem; }
+  .row > div { flex: 1; }
+  fieldset { border: 1px solid #8886; border-radius: 6px; margin-top: 1rem; padding: 0.6rem 0.8rem; }
+  legend { font-weight: 600; padding: 0 0.3rem; }
+  .item { border: 1px solid #8884; border-radius: 6px; padding: 0.6rem; margin-bottom: 0.6rem; position: relative; }
+  .item button.remove { position: absolute; top: 0.4rem; right: 0.4rem; background: #d9534f; color: white; border: none; border-radius: 4px; padding: 0.15rem 0.5rem; cursor: pointer; font-size: 0.8rem; }
+  .actions { margin-top: 1rem; display: flex; gap: 0.6rem; align-items: center; }
+  button.primary { background: #4a90d9; color: white; border: none; border-radius: 4px; padding: 0.5rem 1.2rem; font-size: 0.95rem; cursor: pointer; }
+  button.primary:disabled { opacity: 0.5; cursor: default; }
+  button.secondary { background: transparent; border: 1px solid #8886; border-radius: 4px; padding: 0.4rem 0.8rem; cursor: pointer; color: inherit; }
+  pre.result { white-space: pre-wrap; word-break: break-word; padding: 0.8rem; border-radius: 6px; margin-top: 1rem; font-size: 0.85rem; }
+  pre.result.ok { background: #2e7d3222; border: 1px solid #2e7d3255; }
+  pre.result.err { background: #c0392b22; border: 1px solid #c0392b55; }
+  .baseurl { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; font-size: 0.85rem; }
+  .baseurl input { width: 260px; }
+  .hint { font-size: 0.8rem; opacity: 0.7; margin: 0.2rem 0 0; }
+</style>
+</head>
+<body>
+
+<h1>event-service — feeding job UI</h1>
+<div class="baseurl">
+  <label style="margin:0">Base URL</label>
+  <input type="text" id="baseUrl" value="">
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="venue">Venue (DSL)</button>
+  <button class="tab-btn" data-tab="performers">Performers</button>
+  <button class="tab-btn" data-tab="events">Events</button>
+</div>
+
+<!-- VENUE -->
+<section class="panel active" id="panel-venue">
+  <p class="hint">POST /admin/venues — <code>{ address, script }</code>. Script is the venue DSL: one <code>VENUE "name"</code> line,
+  then one <code>SECTION</code> line per section. Each section needs a compass direction
+  (<code>NORTH</code>/<code>SOUTH</code>/<code>EAST</code>/<code>WEST</code>, one per direction) and a <code>ROWS a..b SEATS a..b</code> range.</p>
+
+  <label>Address</label>
+  <input type="text" id="venueAddress" value="1 Arena Way, Bucharest">
+
+  <label>Script</label>
+  <textarea id="venueScript">VENUE "National Arena"
+SECTION A NORTH ROWS 1..30 SEATS 1..40
+SECTION B SOUTH ROWS 1..20 SEATS 1..25
+SECTION C EAST ROWS 1..15 SEATS 1..20
+SECTION D WEST ROWS 1..10 SEATS 1..10</textarea>
+
+  <div class="actions">
+    <button class="primary" id="venueSubmit">Send</button>
+  </div>
+  <pre class="result" id="venueResult" style="display:none"></pre>
+</section>
+
+<!-- PERFORMERS -->
+<section class="panel" id="panel-performers">
+  <p class="hint">POST /admin/performers — array of performers, bulk-inserted.</p>
+  <div id="performerItems"></div>
+  <button class="secondary" id="performerAdd">+ Add performer</button>
+  <div class="actions">
+    <button class="primary" id="performerSubmit">Send</button>
+  </div>
+  <pre class="result" id="performerResult" style="display:none"></pre>
+</section>
+
+<!-- EVENTS -->
+<section class="panel" id="panel-events">
+  <p class="hint">POST /admin/events — array of events; each needs an existing <code>venueId</code> and, for every
+  performer appearance, an existing <code>performerId</code> with <code>endHour</code> after <code>startHour</code>.
+  Events are always created with status <code>DRAFT</code>.</p>
+  <div id="eventItems"></div>
+  <button class="secondary" id="eventAdd">+ Add event</button>
+  <div class="actions">
+    <button class="primary" id="eventSubmit">Send</button>
+  </div>
+  <pre class="result" id="eventResult" style="display:none"></pre>
+</section>
+
+<script>
+const baseUrlInput = document.getElementById('baseUrl');
+baseUrlInput.value = localStorage.getItem('feedingUiBaseUrl') || window.location.origin;
+baseUrlInput.addEventListener('change', () => localStorage.setItem('feedingUiBaseUrl', baseUrlInput.value));
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+async function send(path, body, resultEl, button) {
+  resultEl.style.display = 'none';
+  button.disabled = true;
+  try {
+    const res = await fetch(baseUrlInput.value.replace(/\/$/, '') + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const text = await res.text();
+    let display = text;
+    try { display = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+    resultEl.textContent = `HTTP ${res.status}\n\n${display}`;
+    resultEl.className = 'result ' + (res.ok ? 'ok' : 'err');
+  } catch (e) {
+    resultEl.textContent = 'Request failed: ' + e.message;
+    resultEl.className = 'result err';
+  } finally {
+    resultEl.style.display = 'block';
+    button.disabled = false;
+  }
+}
+
+// ---- Venue ----
+document.getElementById('venueSubmit').addEventListener('click', () => {
+  send('/admin/venues', {
+    address: document.getElementById('venueAddress').value,
+    script: document.getElementById('venueScript').value
+  }, document.getElementById('venueResult'), document.getElementById('venueSubmit'));
+});
+
+// ---- Performers ----
+const performerItems = document.getElementById('performerItems');
+
+function addPerformerItem(data = {}) {
+  const div = document.createElement('div');
+  div.className = 'item';
+  div.innerHTML = `
+    <button class="remove" title="Remove">x</button>
+    <label>Name</label>
+    <input type="text" class="p-name" value="${data.name || ''}">
+    <div class="row">
+      <div>
+        <label>Genre</label>
+        <input type="text" class="p-genre" value="${data.genre || ''}">
+      </div>
+    </div>
+    <label>Description</label>
+    <input type="text" class="p-description" value="${data.description || ''}">
+  `;
+  div.querySelector('.remove').addEventListener('click', () => div.remove());
+  performerItems.appendChild(div);
+}
+addPerformerItem({ name: 'The Sample Band', genre: 'Rock', description: 'A sample performer for testing.' });
+
+document.getElementById('performerAdd').addEventListener('click', () => addPerformerItem());
+
+document.getElementById('performerSubmit').addEventListener('click', () => {
+  const performers = [...performerItems.querySelectorAll('.item')].map(div => ({
+    name: div.querySelector('.p-name').value,
+    genre: div.querySelector('.p-genre').value,
+    description: div.querySelector('.p-description').value
+  }));
+  send('/admin/performers', performers, document.getElementById('performerResult'), document.getElementById('performerSubmit'));
+});
+
+// ---- Events ----
+const eventItems = document.getElementById('eventItems');
+
+function addAppearanceItem(container, data = {}) {
+  const div = document.createElement('div');
+  div.className = 'item';
+  div.innerHTML = `
+    <button class="remove" title="Remove">x</button>
+    <div class="row">
+      <div>
+        <label>Performer ID</label>
+        <input type="number" class="a-performerId" value="${data.performerId ?? ''}">
+      </div>
+      <div>
+        <label>Start hour</label>
+        <input type="datetime-local" class="a-startHour" value="${data.startHour || ''}">
+      </div>
+      <div>
+        <label>End hour</label>
+        <input type="datetime-local" class="a-endHour" value="${data.endHour || ''}">
+      </div>
+    </div>
+  `;
+  div.querySelector('.remove').addEventListener('click', () => div.remove());
+  container.appendChild(div);
+}
+
+function addEventItem(data = {}) {
+  const div = document.createElement('div');
+  div.className = 'item';
+  div.innerHTML = `
+    <button class="remove" title="Remove">x</button>
+    <div class="row">
+      <div>
+        <label>Venue ID</label>
+        <input type="number" class="e-venueId" value="${data.venueId ?? ''}">
+      </div>
+      <div>
+        <label>Name</label>
+        <input type="text" class="e-name" value="${data.name || ''}">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Country</label>
+        <input type="text" class="e-country" value="${data.country || ''}">
+      </div>
+      <div>
+        <label>City</label>
+        <input type="text" class="e-city" value="${data.city || ''}">
+      </div>
+      <div>
+        <label>Event start hour</label>
+        <input type="datetime-local" class="e-startHour" value="${data.eventStartHour || ''}">
+      </div>
+    </div>
+    <fieldset>
+      <legend>Performer appearances</legend>
+      <div class="appearances"></div>
+      <button class="secondary appearance-add" type="button">+ Add appearance</button>
+    </fieldset>
+  `;
+  div.querySelector('.remove').addEventListener('click', () => div.remove());
+  const appearancesEl = div.querySelector('.appearances');
+  div.querySelector('.appearance-add').addEventListener('click', () => addAppearanceItem(appearancesEl));
+  addAppearanceItem(appearancesEl);
+  eventItems.appendChild(div);
+}
+addEventItem({ name: 'Sample Concert', country: 'Romania', city: 'Bucharest' });
+
+document.getElementById('eventAdd').addEventListener('click', () => addEventItem());
+
+function toOffsetDateTime(localValue) {
+  // datetime-local has no timezone; treat it as local time and let JS resolve the offset.
+  if (!localValue) return null;
+  return new Date(localValue).toISOString();
+}
+
+document.getElementById('eventSubmit').addEventListener('click', () => {
+  const events = [...eventItems.querySelectorAll(':scope > .item')].map(evDiv => ({
+    venueId: Number(evDiv.querySelector('.e-venueId').value),
+    name: evDiv.querySelector('.e-name').value,
+    country: evDiv.querySelector('.e-country').value,
+    city: evDiv.querySelector('.e-city').value,
+    eventStartHour: toOffsetDateTime(evDiv.querySelector('.e-startHour').value),
+    performers: [...evDiv.querySelectorAll('.appearances .item')].map(apDiv => ({
+      performerId: Number(apDiv.querySelector('.a-performerId').value),
+      startHour: toOffsetDateTime(apDiv.querySelector('.a-startHour').value),
+      endHour: toOffsetDateTime(apDiv.querySelector('.a-endHour').value)
+    }))
+  }));
+  send('/admin/events', events, document.getElementById('eventResult'), document.getElementById('eventSubmit'));
+});
+</script>
+
+</body>
+</html>

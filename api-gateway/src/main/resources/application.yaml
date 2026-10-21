@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: api-gateway
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: api-gateway-${random.uuid}
+      auto-offset-reset: latest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+services:
+  user-service:
+    url: ${USER_SERVICE_URL:http://localhost:8082}
+  event-service:
+    url: ${EVENT_SERVICE_URL:http://localhost:8081}
+
+
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET_KEY:J3ME1PCRd2hSuP20NnWFhKZCcb/d4oxYl/cRIVM68i8=}
+
+internal:
+  shared-secret: ${INTERNAL_SHARED_SECRET:dev-only-secret}
+

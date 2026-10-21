@@ -1,0 +1,19 @@
+# copiaza continutul acestui fisier in application-local.yaml si completeaza-l cu credentialele tale
+
+
+spring:
+  mail:
+    host: <SMTP server>
+    port: 587
+    username: <Login>
+    password: <Password>
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+application:
+  mail:
+    from: <mail address>
